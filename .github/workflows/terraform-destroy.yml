@@ -1,0 +1,72 @@
+name: "Terraform Destroy (Manual)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "DESTROY" to confirm teardown'
+        required: true
+        default: ""
+      environment:
+        description: "Environment to destroy"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - "dev"
+          - "staging"
+
+permissions:
+  contents: read
+
+jobs:
+  destroy:
+    name: "Teardown Infrastructure"
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      # 1. Safety Check: Verify confirmation keyword
+      - name: Verify Safety Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DESTROY" ]; then
+            echo "::error::Destruction canceled. You must enter 'DESTROY' in the confirmation prompt."
+            exit 1
+          fi
+          echo "Confirmation received. Proceeding with infrastructure teardown..."
+
+      # 2. Checkout Repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 3. Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      # 4. Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: "us-east-1"
+
+      # 5. Detect Runner IP (Matches apply step parameter requirements)
+      - name: Detect Runner Public IP
+        id: runner_ip
+        run: echo "cidr=$(curl -fsS https://checkip.amazonaws.com)/32" >> "$GITHUB_OUTPUT"
+
+      # 6. Initialize Backend
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false -reconfigure
+
+      # 7. Execute Destroy
+      - name: Terraform Destroy
+        working-directory: terraform
+        env:
+          TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
+        run: terraform destroy -input=false -auto-approve
