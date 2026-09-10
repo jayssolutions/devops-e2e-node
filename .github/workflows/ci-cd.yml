@@ -83,6 +83,7 @@ jobs:
           terraform init -input=false -reconfigure
           terraform fmt -check -recursive
           terraform validate
+          terraform plan
           terraform apply -input=false -auto-approve
           terraform output -raw application_url > ../application_url.txt
 
