@@ -84,9 +84,9 @@ jobs:
           terraform init -input=false -reconfigure
           terraform validate
           terraform plan
-          terraform destroy -input=false -auto-approve
-          # terraform apply -input=false -auto-approve
-          # terraform output -raw application_url > ../application_url.txt
+          # terraform destroy -input=false -auto-approve
+          terraform apply -input=false -auto-approve
+          terraform output -raw application_url > ../application_url.txt
 
       - name: Build Deployment Archive
         run: tar --exclude=node_modules -czf app.tar.gz -C app .
