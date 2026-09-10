@@ -13,8 +13,7 @@ on:
         default: "dev"
         type: choice
         options:
-          - "dev"
-          - "staging"
+          - "dev"         
 
 permissions:
   contents: read
