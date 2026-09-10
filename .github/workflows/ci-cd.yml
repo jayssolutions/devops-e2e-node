@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ci
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    environment: production
+    environment: dev
 
     steps:
       - uses: actions/checkout@v4
@@ -74,25 +74,26 @@ jobs:
           python -m pip install ansible
           ansible-galaxy collection install -r ansible/requirements.yml
 
-      # - name: Configure SSH private key
-      #   run: |
-      #     install -m 700 -d ~/.ssh
-      #     printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-      #     chmod 600 ~/.ssh/id_ed25519
-
       - name: Configure SSH private key
-        shell: bash
-        env:
-          PRIVATE_KEY : ${{ secrets.PRIVATE_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          touch ~/.ssh/private.key
-          chmod 600 ~/.ssh/private.key
-          echo -e "$PRIVATE_KEY" | tr -d '\r' > ~/.ssh/private.key
-          cd devops/ansible/
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/private.key
-          echo "private key added for ansible deployment"             
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "private key added for ansible deployment"
+
+      # - name: Configure SSH private key
+      #   shell: bash
+      #   env:
+      #     PRIVATE_KEY : ${{ secrets.PRIVATE_KEY }}
+      #   run: |
+      #     mkdir -p ~/.ssh
+      #     touch ~/.ssh/private.key
+      #     chmod 600 ~/.ssh/private.key
+      #     echo -e "$PRIVATE_KEY" | tr -d '\r' > ~/.ssh/private.key
+      #     cd devops/ansible/
+      #     eval "$(ssh-agent -s)"
+      #     ssh-add ~/.ssh/private.key
+                       
 
       - name: Build Ansible inventory from Terraform output
         run: |
@@ -104,7 +105,7 @@ jobs:
           APP_ARCHIVE: ../app.tar.gz
         run: |
           cd ansible
-          ansible-playbook playbook.yml --private-key ~/.ssh/private.key
+          ansible-playbook playbook.yml --private-key ~/.ssh/id_ed25519
       - name: Smoke test
         run: |
           APP_URL=$(cat application_url.txt)
