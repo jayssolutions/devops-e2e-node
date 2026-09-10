@@ -75,12 +75,3 @@ resource "aws_lb_target_group_attachment" "app" {
   target_id        = aws_instance.app[count.index].id
   port             = 3000
 }
-
-# Generates ansible_inventory.ini dynamically without requiring template files
-resource "local_file" "ansible_inventory" {
-  content = format(
-    "[app_servers]\n%s\n\n[app_servers:vars]\nansible_user=ec2-user\nansible_ssh_private_key_file=./id_ed25519\nansible_ssh_common_args='-o StrictHostKeyChecking=no'",
-    join("\n", aws_instance.app[*].public_ip)
-  )
-  filename = "${path.module}/ansible_inventory.ini"
-}
