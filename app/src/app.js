@@ -27,7 +27,7 @@ app.use((req, res, next) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    service: "devops-assessment-app",
+    service: "devops-e2e-node-app",
     status: "ok",
     hostname: process.env.HOSTNAME || "unknown"
   });

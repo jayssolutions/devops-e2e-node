@@ -5,8 +5,8 @@
   serial: 1
 
   vars:
-    app_name: devops-assessment
-    app_dir: /opt/devops-assessment
+    app_name: devops-e2e-node
+    app_dir: /opt/devops-e2e-node
     app_port: 3000
     app_archive: "{{ lookup('env', 'APP_ARCHIVE') | default('../app.tar.gz', true) }}"
 
