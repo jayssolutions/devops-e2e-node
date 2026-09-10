@@ -4,14 +4,27 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Select action to perform"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - "apply"
+          - "destroy"
 
 env:
   AWS_REGION: us-east-1
 
 jobs:
   ci:
+    name: "Continuous Integration"
     runs-on: ubuntu-latest
+    # Skip CI unit testing step when triggering a manual destroy
+    if: github.event.inputs.action != 'destroy'
 
     defaults:
       run:
@@ -36,9 +49,10 @@ jobs:
         run: npm test
 
   deploy:
+    name: "Infrastructure & Deployment"
     runs-on: ubuntu-latest
     needs: ci
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: always() && (needs.ci.result == 'success' || github.event.inputs.action == 'destroy') && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment: dev
 
     steps:
@@ -74,23 +88,37 @@ jobs:
         id: runner_ip
         run: echo "cidr=$(curl -fsS https://checkip.amazonaws.com)/32" >> "$GITHUB_OUTPUT"
 
-      - name: Terraform Init, Validate and Apply
+      # --- MANUAL DESTROY BRANCH ---
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
         working-directory: terraform
         env:
           TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
           TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
         run: |
-          terraform init -input=false
-          #terraform fmt -check -recursive
-          #terraform validate
-          terraform plan
+          terraform init -input=false -reconfigure
+          terraform destroy -input=false -auto-approve
+
+      # --- APPLY AND DEPLOY BRANCH ---
+      - name: Terraform Init, Validate and Apply
+        if: github.event.inputs.action != 'destroy'
+        working-directory: terraform
+        env:
+          TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
+        run: |
+          terraform init -input=false -reconfigure
+          terraform fmt -check -recursive
+          terraform validate
           terraform apply -input=false -auto-approve
           terraform output -raw application_url > ../application_url.txt
 
       - name: Build Deployment Archive
+        if: github.event.inputs.action != 'destroy'
         run: tar --exclude=node_modules -czf app.tar.gz -C app .
 
       - name: Configure SSH Private Key
+        if: github.event.inputs.action != 'destroy'
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -98,32 +126,36 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
 
       - name: Build Ansible Inventory
+        if: github.event.inputs.action != 'destroy'
         run: |
           chmod +x scripts/build_inventory.sh
           ./scripts/build_inventory.sh
 
       - name: Wait for SSH Availability
+        if: github.event.inputs.action != 'destroy'
         run: |
           TARGET_IP=$(grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' ansible/ansible_inventory.ini | head -n 1)
-          echo "Waiting for SSH to become ready on $TARGET_IP..."
+          echo "Checking SSH connectivity on $TARGET_IP..."
           until nc -z -v -w5 $TARGET_IP 22; do
-            echo "Waiting for Port 22..."
+            echo "Waiting for SSH port 22 on $TARGET_IP..."
             sleep 5
           done
-          echo "SSH host port 22 is open."
+          echo "SSH daemon is active!"
 
       - name: Deploy with Ansible
+        if: github.event.inputs.action != 'destroy'
         env:
           APP_ARCHIVE: "../app.tar.gz"
           ANSIBLE_HOST_KEY_CHECKING: "False"
         working-directory: ansible
         run: |
-          ansible-playbook playbook.yml --private-key ~/.ssh/id_ed25519
+          ansible-playbook -i ansible_inventory.ini playbook.yml --private-key ~/.ssh/id_ed25519
 
       - name: Smoke Test
+        if: github.event.inputs.action != 'destroy'
         run: |
           APP_URL=$(cat application_url.txt)
-          echo "Performing smoke test on $APP_URL/health..."
+          echo "Testing endpoint $APP_URL/health..."
           for i in {1..12}; do
             if curl -fsS "$APP_URL/health"; then
               echo "Smoke test passed!"
