@@ -91,7 +91,8 @@ jobs:
           echo -e "$PRIVATE_KEY" | tr -d '\r' > ~/.ssh/private.key
           cd devops/ansible/
           eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/private.key             
+          ssh-add ~/.ssh/private.key
+          echo "private key added for ansible deployment"             
 
       - name: Build Ansible inventory from Terraform output
         run: |
