@@ -80,11 +80,10 @@ jobs:
           TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
           TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
         run: |
-          terraform init -upgrade
-          # terraform init -input=false -reconfigure
-          # terraform fmt -check -recursive
-          # terraform validate
-          # terraform plan
+          terraform init -input=false
+          terraform fmt -check -recursive
+          terraform validate
+          terraform plan
           # terraform apply -input=false -auto-approve
           # terraform output -raw application_url > ../application_url.txt
 
