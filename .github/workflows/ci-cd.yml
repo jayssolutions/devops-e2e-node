@@ -58,7 +58,7 @@ jobs:
           TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
           TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
         run: |
-          terraform init -reconfigure 
+          terraform init -upgrade
           terraform fmt -check -recursive
           terraform validate
           terraform plan -input=false -out=tfplan
