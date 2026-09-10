@@ -5,7 +5,7 @@ filebeat.inputs:
     paths:
       - /var/log/messages
     fields:
-      service: devops-assessment
+      service: devops-e2e-node
     fields_under_root: true
 
 output.logstash:

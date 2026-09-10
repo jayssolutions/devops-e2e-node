@@ -5,7 +5,7 @@ variable "aws_region" {
 
 variable "project_name" {
   type    = string
-  default = "devops-assessment-simple"
+  default = "devops-e2e-node"
 }
 
 variable "vpc_cidr" {
