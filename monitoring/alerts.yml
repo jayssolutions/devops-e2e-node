@@ -1,0 +1,25 @@
+groups:
+  - name: application-alerts
+    rules:
+      - alert: HighApplicationErrorRate
+        expr: |
+          (
+            sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_request_duration_seconds_count[5m])), 1)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+
+      - alert: HighProcessCPU
+        expr: rate(process_cpu_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+
+      - alert: HighProcessMemory
+        expr: process_resident_memory_bytes > 500 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning

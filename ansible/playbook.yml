@@ -1,0 +1,75 @@
+---
+- name: Configure and deploy Node.js application
+  hosts: app
+  become: true
+  serial: 1
+
+  vars:
+    app_name: devops-assessment
+    app_dir: /opt/devops-assessment
+    app_port: 3000
+    app_archive: "{{ lookup('env', 'APP_ARCHIVE') | default('../app.tar.gz', true) }}"
+
+  tasks:
+    - name: Install Node.js and npm
+      ansible.builtin.dnf:
+        name:
+          - nodejs
+          - npm
+          - tar
+        state: present
+
+    - name: Create application user
+      ansible.builtin.user:
+        name: "{{ app_name }}"
+        system: true
+        shell: /sbin/nologin
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_name }}"
+        group: "{{ app_name }}"
+        mode: "0755"
+
+    - name: Copy application archive
+      ansible.builtin.copy:
+        src: "{{ app_archive }}"
+        dest: /tmp/app.tar.gz
+        mode: "0644"
+
+    - name: Extract application
+      ansible.builtin.unarchive:
+        src: /tmp/app.tar.gz
+        dest: "{{ app_dir }}"
+        remote_src: true
+        owner: "{{ app_name }}"
+        group: "{{ app_name }}"
+
+    - name: Install production dependencies
+      community.general.npm:
+        path: "{{ app_dir }}"
+        production: true
+      become_user: "{{ app_name }}"
+
+    - name: Install systemd service
+      ansible.builtin.template:
+        src: templates/app.service.j2
+        dest: "/etc/systemd/system/{{ app_name }}.service"
+        mode: "0644"
+      notify: Restart application
+
+    - name: Ensure service is running
+      ansible.builtin.systemd:
+        name: "{{ app_name }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart application
+      ansible.builtin.systemd:
+        name: "{{ app_name }}"
+        state: restarted
+        daemon_reload: true

@@ -1,0 +1,16 @@
+[Unit]
+Description=DevOps Assessment Node.js Application
+After=network.target
+
+[Service]
+User={{ app_name }}
+Group={{ app_name }}
+WorkingDirectory={{ app_dir }}
+Environment=NODE_ENV=production
+Environment=PORT={{ app_port }}
+ExecStart=/usr/bin/node {{ app_dir }}/src/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

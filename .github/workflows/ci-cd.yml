@@ -1,0 +1,104 @@
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-west-2
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm install
+      - run: npm run lint
+      - run: npm test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Detect GitHub runner public IP
+        id: runner_ip
+        run: echo "cidr=$(curl -fsS https://checkip.amazonaws.com)/32" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform validate and apply
+        working-directory: terraform
+        env:
+          TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
+        run: |
+          terraform init
+          terraform fmt -check -recursive
+          terraform validate
+          terraform apply -auto-approve
+          terraform output -raw application_url > ../application_url.txt
+
+      - name: Build deployment archive
+        run: tar --exclude=node_modules -czf app.tar.gz -C app .
+
+      - name: Install Ansible and jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          python -m pip install ansible
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Configure SSH private key
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Build Ansible inventory from Terraform output
+        run: |
+          chmod +x scripts/build_inventory.sh
+          ./scripts/build_inventory.sh
+
+      - name: Deploy with Ansible
+        env:
+          APP_ARCHIVE: ../app.tar.gz
+        run: |
+          cd ansible
+          ansible-playbook playbook.yml --private-key ~/.ssh/id_ed25519
+
+      - name: Smoke test
+        run: |
+          APP_URL=$(cat application_url.txt)
+          for i in {1..12}; do
+            if curl -fsS "$APP_URL/health"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1

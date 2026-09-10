@@ -1,0 +1,12 @@
+filebeat.inputs:
+  - type: filestream
+    id: node-app
+    enabled: true
+    paths:
+      - /var/log/messages
+    fields:
+      service: devops-assessment
+    fields_under_root: true
+
+output.logstash:
+  hosts: ["logstash:5044"]

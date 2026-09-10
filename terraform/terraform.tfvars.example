@@ -1,0 +1,4 @@
+aws_region     = "eu-west-2"
+instance_count = 2
+admin_cidr     = "203.0.113.10/32"
+public_key     = "ssh-ed25519 AAAA... candidate@example"
