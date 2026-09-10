@@ -1,3 +1,4 @@
 output "instance_public_ips" {
-  value = aws_instance.app[*].public_ip
+  description = "Public IP addresses of application instances"
+  value       = aws_instance.app[*].public_ip
 }

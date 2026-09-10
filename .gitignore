@@ -46,4 +46,3 @@ terraform.rc
 # planout
 terraform/modules/compute/ansible_inventory.ini
 terraform/modules/compute/id_ed25519
-terraform/modules/compute/id_ed25519
