@@ -18,15 +18,22 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - run: npm install
-      - run: npm run lint
-      - run: npm test
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Run Tests
+        run: npm test
 
   deploy:
     runs-on: ubuntu-latest
@@ -35,85 +42,93 @@ jobs:
     environment: dev
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
 
-      - name: Configure AWS credentials
+      - name: Setup Python & Ansible
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+          if [ -f ansible/requirements.yml ]; then
+            ansible-galaxy collection install -r ansible/requirements.yml
+          fi
+
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Detect GitHub runner public IP
+      - name: Detect Runner Public IP
         id: runner_ip
         run: echo "cidr=$(curl -fsS https://checkip.amazonaws.com)/32" >> "$GITHUB_OUTPUT"
 
-      - name: Terraform validate and apply
+      - name: Terraform Init, Validate and Apply
         working-directory: terraform
         env:
           TF_VAR_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
           TF_VAR_admin_cidr: ${{ steps.runner_ip.outputs.cidr }}
         run: |
-          terraform init -upgrade
+          terraform init -input=false -reconfigure
           terraform fmt -check -recursive
           terraform validate
-          terraform plan -input=false -out=tfplan
-          terraform apply -auto-approve
+          terraform apply -input=false -auto-approve
           terraform output -raw application_url > ../application_url.txt
 
-      - name: Build deployment archive
+      - name: Build Deployment Archive
         run: tar --exclude=node_modules -czf app.tar.gz -C app .
 
-      - name: Install Ansible and jq
+      - name: Configure SSH Private Key
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-          python -m pip install ansible
-          ansible-galaxy collection install -r ansible/requirements.yml
-
-      - name: Configure SSH private key
-        run: |
-          install -m 700 -d ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          echo "private key added for ansible deployment"
 
-      # - name: Configure SSH private key
-      #   shell: bash
-      #   env:
-      #     PRIVATE_KEY : ${{ secrets.PRIVATE_KEY }}
-      #   run: |
-      #     mkdir -p ~/.ssh
-      #     touch ~/.ssh/private.key
-      #     chmod 600 ~/.ssh/private.key
-      #     echo -e "$PRIVATE_KEY" | tr -d '\r' > ~/.ssh/private.key
-      #     cd devops/ansible/
-      #     eval "$(ssh-agent -s)"
-      #     ssh-add ~/.ssh/private.key
-                       
-
-      - name: Build Ansible inventory from Terraform output
+      - name: Build Ansible Inventory
         run: |
           chmod +x scripts/build_inventory.sh
           ./scripts/build_inventory.sh
 
+      - name: Wait for SSH Availability
+        run: |
+          TARGET_IP=$(grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' ansible/ansible_inventory.ini | head -n 1)
+          echo "Waiting for SSH to become ready on $TARGET_IP..."
+          until nc -z -v -w5 $TARGET_IP 22; do
+            echo "Waiting for Port 22..."
+            sleep 5
+          done
+          echo "SSH host port 22 is open."
+
       - name: Deploy with Ansible
         env:
-          APP_ARCHIVE: ../app.tar.gz
+          APP_ARCHIVE: "../app.tar.gz"
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        working-directory: ansible
         run: |
-          cd ansible
           ansible-playbook playbook.yml --private-key ~/.ssh/id_ed25519
-      - name: Smoke test
+
+      - name: Smoke Test
         run: |
           APP_URL=$(cat application_url.txt)
+          echo "Performing smoke test on $APP_URL/health..."
           for i in {1..12}; do
             if curl -fsS "$APP_URL/health"; then
+              echo "Smoke test passed!"
               exit 0
             fi
             sleep 10
           done
+          echo "Smoke test failed."
           exit 1
