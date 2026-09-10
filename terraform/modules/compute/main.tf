@@ -8,7 +8,7 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-resource "aws_key_pair" "assessment" {
+resource "aws_key_pair" "e2e-node" {
   key_name   = "${var.project_name}-key"
   public_key = var.public_key
 }
@@ -45,7 +45,7 @@ resource "aws_instance" "app" {
   count                       = var.instance_count
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.instance_type
-  key_name                    = aws_key_pair.assessment.key_name
+  key_name                    = aws_key_pair.e2e-node.key_name
   subnet_id                   = var.public_subnet_ids[count.index % length(var.public_subnet_ids)]
   vpc_security_group_ids      = [aws_security_group.app.id]
   associate_public_ip_address = true

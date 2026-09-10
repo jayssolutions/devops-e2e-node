@@ -1,5 +1,5 @@
 {
-  "name": "devops-assessment-app",
+  "name": "devops-e2e-node-app",
   "version": "1.0.0",
   "private": true,
   "main": "src/server.js",
