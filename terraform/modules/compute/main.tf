@@ -8,22 +8,10 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# 1. Generate SSH Private Key (ED25519 for AL2023 compatibility)
-resource "tls_private_key" "ansible" {
-  algorithm = "ED25519"
-}
-
-# 2. Upload OpenSSH Public Key to AWS EC2 Key Pair
+# Upload OpenSSH Public Key to AWS EC2 Key Pair
 resource "aws_key_pair" "node_app" {
   key_name   = "${var.project_name}-key"
-  public_key = trimspace(tls_private_key.ansible.public_key_openssh)
-}
-
-# 3. Save Private Key locally with 0600 permissions for Ansible
-resource "local_file" "ansible_private_key" {
-  content         = tls_private_key.ansible.private_key_openssh
-  filename        = "${path.module}/id_ed25519"
-  file_permission = "0600"
+  public_key = trimspace(var.public_key)
 }
 
 resource "aws_security_group" "app" {
