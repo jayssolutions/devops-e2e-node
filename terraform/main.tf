@@ -27,7 +27,7 @@ module "compute" {
 
 # Create the S3 State Bucket
 module "s3_backend" {
-  source = "./modules/s3_backend"
+  source        = "./modules/s3_backend"
   bucket_name   = "jays-devops-tf-state-bucket"
-  force_destroy = false 
+  force_destroy = false
 } 

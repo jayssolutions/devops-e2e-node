@@ -268,3 +268,78 @@ push to main
 
 > **SSH_PRIVATE_KEY format:** Copy the key directly from `cat ~/.ssh/id_ed25519` — it must contain real newlines, not escaped `\n`. The pipeline validates the key with `ssh-keygen -y` and will fail fast if the format is wrong.
  
+## Known issues / assumptions 
+- Prometheus alerts are visible in the UI only; no Alertmanager/notification channel (Slack, email, PagerDuty) is wired up yet.
+- App instances sit in public subnets with public IPs (needed for the current SSH-based Ansible deploy); a private-subnet + bastion/SSM design would reduce exposure but adds setup complexity.
+- Single environment (`dev`), single region (`us-east-1` by default).
+- `ansible/inventory.ini` is generated at deploy time and isn't committed.
+
+
+# DevOps Exercise - Technical Notes & Key Observations
+
+During the execution of this DevOps exercise, several technical challenges and configuration hurdles were identified and resolved. Below is a summary of the key observations, root cause analyses, and solutions implemented.
+
+---
+
+## 🛠️ Key Observations & Technical Findings
+
+### 1. Terraform State Management & Remote Backend Migration
+* **Issue:** The Terraform state file (`terraform.tfstate`) was initially tracked at the repository level. Storing state locally led to state drift and conflicts during infrastructure provisioning across runs.
+* **Root Cause:** Lack of centralized, remote state management and state locking.
+* **Solution:** 
+  * Implemented an S3 remote backend module (`s3Backend`) for secure state storage.
+  * Configured native S3 state locking using `use_lockfile = true` available in **Terraform v1.10.0+**, eliminating the need for a separate DynamoDB locking table.
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket       = "my-devops-tfstate-bucket"
+    key          = "infrastructure/terraform.tfstate"
+    region       = "eu-west-1"
+    use_lockfile = true # Native S3 locking feature (Terraform v1.10.0+)
+  }
+}
+```
+
+---
+
+### 2. Ansible Inventory Configuration
+* **Issue:** Playbook execution failed during initial provisioning runs.
+* **Root Cause:** Syntax typo present within the `inventory.ini` file preventing Ansible from parsing host groups correctly.
+* **Solution:** Corrected host definitions and IP declarations in `inventory.ini` to restore smooth playbook execution.
+
+---
+
+### 3. SSH Authentication Failure (EC2 & Ansible)
+* **Issue:** Ansible playbooks repeatedly failed to connect to provisioning target EC2 instances over SSH (`Host Unreachable` / `Permission Denied`).
+* **Root Cause:** Investigation revealed that the private key file lacked a trailing newline character (`\n`), causing OpenSSH and Ansible's SSH wrapper to misinterpret the key format.
+* **Solution:** Reformatted the private key file to ensure proper ASCII formatting and trailing newline structure, restoring SSH connectivity.
+
+```bash
+# Verify and fix missing newline in private key
+echo "" >> ~/.ssh/devops_ec2_key.pem
+chmod 400 ~/.ssh/devops_ec2_key.pem
+```
+
+---
+
+### 4. Application Verification & Load Balancer Routing
+* **Observation:** Application endpoint verification and functional testing must target the Elastic Load Balancer (ELB) URL rather than individual backend EC2 instance IPs.
+* **Impact:** Ensures end-to-end traffic routing, health checks, and listener rules are validated through the ingress path.
+
+---
+
+### 5. Elastic Stack (ELK) Deployment Constraints
+* **Issue:** Unable to successfully bring up the ELK stack (Elasticsearch, Logstash, Kibana).
+* **Root Cause:** Elasticsearch and Kibana memory requirements exceeded available RAM limits on AWS Free Tier instance types (`t2.micro` / `t3.micro`).
+* **Resolution:** ELK stack deployment was paused due to AWS Free Tier compute limits. For production/further testing, instances should be upgraded to at least `t3.medium` with sufficient swap space configured.
+
+---
+
+## 📌 Summary Checklist
+
+- [x] Remote S3 backend configured with native S3 locking (`use_lockfile = true`)
+- [x] Fixed syntax errors in `inventory.ini`
+- [x] Resolved SSH key formatting issue for EC2 connectivity
+- [x] Application validated via ELB DNS Endpoint
+- [ ] *ELK Stack provisioned (Deferred - requires higher tier instances)*
