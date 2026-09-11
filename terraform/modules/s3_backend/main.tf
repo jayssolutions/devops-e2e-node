@@ -1,8 +1,11 @@
 resource "aws_s3_bucket" "state" {
   bucket        = var.bucket_name
   force_destroy = var.force_destroy
-
-  tags = var.tags
+   
+  tags = {
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  } 
 }
 
 # Enable versioning so you can revert/recover previous state files

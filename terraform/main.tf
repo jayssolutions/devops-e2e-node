@@ -26,14 +26,8 @@ module "compute" {
 
 
 # Create the S3 State Bucket
-module "tf_state_bucket" {
+module "s3_backend" {
   source = "./modules/s3_backend"
-
   bucket_name   = "jays-devops-tf-state-bucket"
-  force_destroy = false
-
-  tags = {
-    Environment = "dev"
-    ManagedBy   = "Terraform"
-  }
+  force_destroy = false 
 } 
