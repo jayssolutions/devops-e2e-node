@@ -23,11 +23,3 @@ module "compute" {
   admin_cidr         = var.admin_cidr
   public_key         = var.public_key
 }
-
-
-# Create the S3 State Bucket
-module "s3_backend" {
-  source        = "./modules/s3_backend"
-  bucket_name   = "jays-devops-tf-state-bucket"
-  force_destroy = false
-} 
